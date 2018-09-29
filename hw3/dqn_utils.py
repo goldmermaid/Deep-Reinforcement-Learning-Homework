@@ -49,7 +49,7 @@ def linear_interpolation(l, r, alpha):
 class PiecewiseSchedule(object):
     def __init__(self, endpoints, interpolation=linear_interpolation, outside_value=None):
         """Piecewise schedule.
-        endpoints: [(int, int)]
+        endpoints: [(int, int), (int, int), (int, int), ...]
             list of pairs `(time, value)` meanining that schedule should output
             `value` when `t==time`. All the values for time must be sorted in
             an increasing order. When t is between two times, e.g. `(time_a, value_a)`
@@ -120,7 +120,7 @@ def compute_exponential_averages(variables, decay):
         List of scalar tensors corresponding to averages
         of al the `variables` (in order)
     apply_op: tf.runnable
-        Op to be run to update the averages with current value
+        Op to be run to update the averages with current value 
         of variables.
     """
     averager = tf.train.ExponentialMovingAverage(decay=decay)
@@ -177,6 +177,7 @@ class ReplayBuffer(object):
 
         The sepecific memory optimizations use here are:
             - only store each frame once rather than k times
+                ## !!!!!! Why store k times?
               even if every observation normally consists of k last frames
             - store frames as np.uint8 (actually it is most time-performance
               to cast them back to float32 on GPU to minimize memory transfer
@@ -201,7 +202,7 @@ class ReplayBuffer(object):
         self.lander = lander
 
         self.size = size
-        self.frame_history_len = frame_history_len
+        self.frame_history_len = frame_history_len  # 
 
         self.next_idx      = 0
         self.num_in_buffer = 0
@@ -278,16 +279,21 @@ class ReplayBuffer(object):
     def _encode_observation(self, idx):
         end_idx   = idx + 1 # make noninclusive
         start_idx = end_idx - self.frame_history_len
+        
         # this checks if we are using low-dimensional observations, such as RAM
         # state, in which case we just directly return the latest RAM.
         if len(self.obs.shape) == 2:
             return self.obs[end_idx-1]
+
         # if there weren't enough frames ever in the buffer for context
         if start_idx < 0 and self.num_in_buffer != self.size:
             start_idx = 0
+
+        ## !! check whether there is a done betwee start_idx and end_idx
         for idx in range(start_idx, end_idx - 1):
             if self.done[idx % self.size]:
                 start_idx = idx + 1
+
         missing_context = self.frame_history_len - (end_idx - start_idx)
         # if zero padding is needed for missing context
         # or we are on the boundry of the buffer
@@ -313,7 +319,7 @@ class ReplayBuffer(object):
 
         Returns
         -------
-        idx: int
+        ret: int
             Index at which the frame is stored. To be used for `store_effect` later.
         """
         if self.obs is None:

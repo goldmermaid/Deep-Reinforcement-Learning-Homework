@@ -34,7 +34,9 @@ class QLearner(object):
     rew_file=None,
     double_q=True,
     lander=False):
-    """Run Deep Q-learning algorithm.
+    """
+
+    Run Deep Q-learning algorithm.
 
     You can specify your own convnet using q_func.
 
@@ -44,6 +46,7 @@ class QLearner(object):
     ----------
     env: gym.Env
         gym environment to train on.
+
     q_func: function
         Model to use for computing the q function. It should accept the
         following named arguments:
@@ -56,9 +59,11 @@ class QLearner(object):
                 should be created
             reuse: bool
                 whether previously created variables should be reused.
+
     optimizer_spec: OptimizerSpec
         Specifying the constructor and kwargs, as well as learning rate schedule
         for the optimizer
+
     session: tf.Session
         tensorflow session to use.
     exploration: rl_algs.deepq.utils.schedules.Schedule
@@ -87,6 +92,7 @@ class QLearner(object):
         If True, then use double Q-learning to compute target values. Otherwise, use vanilla DQN.
         https://papers.nips.cc/paper/3964-double-q-learning.pdf
     """
+
     assert type(env.observation_space) == gym.spaces.Box
     assert type(env.action_space)      == gym.spaces.Discrete
 
@@ -117,13 +123,17 @@ class QLearner(object):
     # placeholder for current observation (or state)
     self.obs_t_ph              = tf.placeholder(
         tf.float32 if lander else tf.uint8, [None] + list(input_shape))
+
     # placeholder for current action
     self.act_t_ph              = tf.placeholder(tf.int32,   [None])
+
     # placeholder for current reward
     self.rew_t_ph              = tf.placeholder(tf.float32, [None])
+
     # placeholder for next observation (or state)
     self.obs_tp1_ph            = tf.placeholder(
         tf.float32 if lander else tf.uint8, [None] + list(input_shape))
+
     # placeholder for end of episode mask
     # this value is 1 if the next state corresponds to the end of an episode,
     # in which case there is no Q-value at the next state; at the end of an
@@ -139,33 +149,49 @@ class QLearner(object):
       obs_t_float   = tf.cast(self.obs_t_ph,   tf.float32) / 255.0
       obs_tp1_float = tf.cast(self.obs_tp1_ph, tf.float32) / 255.0
 
+    '''
     # Here, you should fill in your own code to compute the Bellman error. This requires
     # evaluating the current and next Q-values and constructing the corresponding error.
     # TensorFlow will differentiate this error for you, you just need to pass it to the
     # optimizer. See assignment text for details.
+
     # Your code should produce one scalar-valued tensor: total_error
     # This will be passed to the optimizer in the provided code below.
+
     # Your code should also produce two collections of variables:
     # q_func_vars
     # target_q_func_vars
     # These should hold all of the variables of the Q-function network and target network,
     # respectively. A convenient way to get these is to make use of TF's "scope" feature.
+
     # For example, you can create your Q-function network with the scope "q_func" like this:
     # <something> = q_func(obs_t_float, num_actions, scope="q_func", reuse=False)
     # And then you can obtain the variables like this:
     # q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='q_func')
     # Older versions of TensorFlow may require using "VARIABLES" instead of "GLOBAL_VARIABLES"
+
     # Tip: use huber_loss (from dqn_utils) instead of squared error when defining self.total_error
-    ######
-
+    '''
+    ##############################
     # YOUR CODE HERE
+    target_q_func_net = q_func(obs_th1_float, self.num_actions, scope="target_q_func", reuse=False)
+    target_q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='target_q_func')
 
-    ######
+    q_func_net = q_func(obs_t_float, self.num_actions, scope="q_func", reuse=False)
+    q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='q_func')
+
+    y_t_ph = self.rew_t_ph + (1-self.done_mask_ph) * self.gamma * tf.reduce_max(target_q_func_net, axis=1)
+    ## shape: [None]
+    act_onehot = tf.one_hot(self.act_t_ph, num_actions)
+    q_values = tf.reduce_sum(q_func_net * act_onehot, axis=1) 
+    ## shape: [None]
+    self.total_error = tf.reduce_mean(tf.losses.huber_loss(q_values, y_t_ph)) 
+    ##############################
 
     # construct optimization op (with gradient clipping)
     self.learning_rate = tf.placeholder(tf.float32, (), name="learning_rate")
-    optimizer = self.optimizer_spec.constructor(learning_rate=self.learning_rate, **self.optimizer_spec.kwargs)
-    self.train_fn = minimize_and_clip(optimizer, self.total_error,
+    self.optimizer = self.optimizer_spec.constructor(learning_rate=self.learning_rate, **self.optimizer_spec.kwargs)
+    self.train_fn = minimize_and_clip(self.optimizer, self.total_error,
                  var_list=q_func_vars, clip_val=grad_norm_clipping)
 
     # update_target_fn will be called periodically to copy Q network to target Q network
@@ -196,39 +222,47 @@ class QLearner(object):
     return self.stopping_criterion is not None and self.stopping_criterion(self.env, self.t)
 
   def step_env(self):
+    '''
     ### 2. Step the env and store the transition
+
+    # At the end of this block of code, the simulator should have been
+    # advanced one step, and the replay buffer should contain one more transition.
+    # Specifically, self.last_obs must point to the new latest observation.
+    
+    #####
+    '''
+
+    ##############################
+    # YOUR CODE HERE
+
     # At this point, "self.last_obs" contains the latest observation that was
     # recorded from the simulator. Here, your code needs to store this
     # observation and its outcome (reward, next observation, etc.) into
     # the replay buffer while stepping the simulator forward one step.
-    # At the end of this block of code, the simulator should have been
-    # advanced one step, and the replay buffer should contain one more
-    # transition.
-    # Specifically, self.last_obs must point to the new latest observation.
-    # Useful functions you'll need to call:
-    # obs, reward, done, info = env.step(action)
-    # this steps the environment forward one step
-    # obs = env.reset()
-    # this resets the environment if you reached an episode boundary.
-    # Don't forget to call env.reset() to get a new observation if done
-    # is true!!
-    # Note that you cannot use "self.last_obs" directly as input
-    # into your network, since it needs to be processed to include context
-    # from previous frames. You should check out the replay buffer
-    # implementation in dqn_utils.py to see what functionality the replay
-    # buffer exposes. The replay buffer has a function called
-    # encode_recent_observation that will take the latest observation
-    # that you pushed into the buffer and compute the corresponding
-    # input that should be given to a Q network by appending some
-    # previous frames.
+    idx = self.replay_buffer.store_frame(self.last_obs)
+    ## return most recent frames
+    latest_obs_frames = self.replay_buffer.encode_recent_observation()
+
     # Don't forget to include epsilon greedy exploration!
-    # And remember that the first time you enter this loop, the model
+    choose_random_action = np.random.rand() < self.exploration.value(self.t)
+    # The first time you enter this loop, the model
     # may not yet have been initialized (but of course, the first step
     # might as well be random, since you haven't trained your net...)
+    if self.model_initialized and not choose_random_action:
+        action_values = self.session.run(q_func_net, feed_dict={self.obs_t_ph: [latest_obs_frames]})
+        action  = np.argmax(action_values)
+    else:
+        action = np.random.randint(num_actions)
 
-    #####
+    # steps the environment forward one step
+    obs, reward, done, info = env.step(action)
+    self.store_effect(idx, action, reward, done)
 
-    # YOUR CODE HERE
+    # resets the environment if you reached an episode boundary.
+    if done:
+      self.obs = env.reset()
+    ##############################
+
 
   def update_model(self):
     ### 3. Perform experience replay and train the network.
@@ -238,11 +272,19 @@ class QLearner(object):
     if (self.t > self.learning_starts and \
         self.t % self.learning_freq == 0 and \
         self.replay_buffer.can_sample(self.batch_size)):
+
+    ##############################
+    # YOUR CODE HERE
       # Here, you should perform training. Training consists of four steps:
+
       # 3.a: use the replay buffer to sample a batch of transitions (see the
       # replay buffer code for function definition, each batch that you sample
       # should consist of current observations, current actions, rewards,
       # next observations, and done indicator).
+
+      obs_t_batch, act_t_ph, rew__t_batch, obs_tp1_batch, done_mask_ph = \
+          self.replay_buffer.sample(self.batch_size)
+
       # 3.b: initialize the model if it has not been initialized yet; to do
       # that, call
       #    initialize_interdependent_variables(self.session, tf.global_variables(), {
@@ -253,6 +295,15 @@ class QLearner(object):
       # the current and next time step. The boolean variable model_initialized
       # indicates whether or not the model has been initialized.
       # Remember that you have to update the target network too (see 3.d)!
+
+      if not self.model_initialized:
+        self.exploration.initialize_interdependent_variables(self.session, tf.global_variables(), 
+          {
+             self.obs_t_ph: obs_t_batch,
+             self.obs_tp1_ph: obs_tp1_batch,
+         })
+        self.model_initialized = True
+
       # 3.c: train the model. To do this, you'll need to use the self.train_fn and
       # self.total_error ops that were created earlier: self.total_error is what you
       # created to compute the total Bellman error in a batch, and self.train_fn
@@ -267,14 +318,22 @@ class QLearner(object):
       # (this is needed for computing self.total_error)
       # self.learning_rate -- you can get this from self.optimizer_spec.lr_schedule.value(t)
       # (this is needed by the optimizer to choose the learning rate)
+      self.session.run(self.train_fn, \
+                      feed_dict={{self.obs_t_batch : obs_t_ph, 
+                                  self.act_t_ph : act_t_ph, 
+                                  self.rew__t_batch : rew_t_ph, 
+                                  self.obs_tp1_batch : obs_tp1_ph, 
+                                  self.done_mask_ph : done_mask_ph,
+                                  self.learning_rate : self.optimizer_spec.lr_schedule.value(t)})
+
       # 3.d: periodically update the target network by calling
       # self.session.run(self.update_target_fn)
       # you should update every target_update_freq steps, and you may find the
       # variable self.num_param_updates useful for this (it was initialized to 0)
-      #####
-
-      # YOUR CODE HERE
-
+      if self.num_param_updates % self.target_update_freq == 0:
+        self.session.run(self.update_target_fn)
+      ##############################
+      
       self.num_param_updates += 1
 
     self.t += 1
