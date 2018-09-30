@@ -187,14 +187,13 @@ class QLearner(object):
     # And then you can obtain the variables like this:
     # q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='q_func')
     # Older versions of TensorFlow may require using "VARIABLES" instead of "GLOBAL_VARIABLES"
+    self.q_func_net = q_func(obs_t_float, self.num_actions, scope="q_func", reuse=False)
     target_q_func_net = q_func(obs_tp1_float, self.num_actions, scope="target_q_func", reuse=False)
+    target_q_func_net = tf.stop_gradient(target_q_func_net). ## !!!!!!
     ## shape: [None, num_actions]
     # target_q_func_net = tf.Print(target_q_func_net, [target_q_func_net], "target_q_func_net")  ## seems to decrease as time goes, werid
     # target_q_func_net = tensor_check(target_q_func_net, msg="target_q_func_net")
-    target_q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='target_q_func')
 
-    self.q_func_net = q_func(obs_t_float, self.num_actions, scope="q_func", reuse=False)
-    q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='q_func')
 
     y_t_ph = self.rew_t_ph + (1-self.done_mask_ph) * gamma * tf.reduce_max(target_q_func_net, axis=1)
     # y_t_ph = tf.Print(y_t_ph, [y_t_ph], "y_t_ph")
@@ -209,6 +208,9 @@ class QLearner(object):
     # Tip: use huber_loss (from dqn_utils) instead of squared error when defining self.total_error
     #### self.total_error = tf.reduce_mean(tf.losses.huber_loss(q_values, y_t_ph)) 
     self.total_error = tf.reduce_mean(huber_loss(q_values - y_t_ph)) 
+
+    target_q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='target_q_func')
+    q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='q_func')
     ##############################
 
     # construct optimization op (with gradient clipping)
@@ -284,6 +286,8 @@ class QLearner(object):
     # resets the environment if you reached an episode boundary.
     if done:
       self.last_obs = self.env.reset()
+    else:
+      self.last_obs = obs
     ##############################
 
 
@@ -344,7 +348,7 @@ class QLearner(object):
       # (this is needed by the optimizer to choose the learning rate)
 
       # if (self.t % self.log_every_n_steps == 1) and self.model_initialized:
-      self.total_error = tf.Print(self.total_error, [self.total_error], "self.total_error: ")
+      # self.total_error = tf.Print(self.total_error, [self.total_error], "self.total_error: ")
       self.session.run(self.train_fn, \
                       feed_dict={self.obs_t_ph : obs_t_batch, 
                                   self.act_t_ph : act_t_batch, 
