@@ -30,7 +30,8 @@ def atari_model(img_in, num_actions, scope, reuse=False):
 
 def atari_learn(env,
                 session,
-                num_timesteps):
+                num_timesteps,
+                rew_file):
     # This is just a rough estimate
     num_iterations = float(num_timesteps) / 4.0
 
@@ -75,7 +76,8 @@ def atari_learn(env,
         frame_history_len=4,
         target_update_freq=10000,
         grad_norm_clipping=10,
-        double_q=True
+        double_q=True,
+        rew_file=rew_file,
     )
     env.close()
 
@@ -116,15 +118,18 @@ def get_env(task, seed):
     return env
 
 def main():
+    import time
     # Get Atari games.
-    task = gym.make('PongNoFrameskip-v4')
+    game_name = 'PongNoFrameskip-v4'
+    task = gym.make(game_name)
+    rew_file_name = "{}_001_{}".format(game_name, time.strftime("%d-%m-%Y_%H-%M-%S"))
 
     # Run training
     seed = random.randint(0, 9999)
     print('random seed = %d' % seed)
     env = get_env(task, seed)
     session = get_session()
-    atari_learn(env, session, num_timesteps=2e8)
+    atari_learn(env, session, num_timesteps=2e8, rew_file=rew_file_name)
 
 if __name__ == "__main__":
     main()

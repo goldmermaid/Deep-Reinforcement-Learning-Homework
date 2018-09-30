@@ -60,7 +60,8 @@ def lander_kwargs():
 def lander_learn(env,
                  session,
                  num_timesteps,
-                 seed):
+                 seed,
+                 rew_file):
 
     optimizer = lander_optimizer()
     stopping_criterion = lander_stopping_criterion(num_timesteps)
@@ -72,6 +73,7 @@ def lander_learn(env,
         exploration=lander_exploration_schedule(num_timesteps),
         stopping_criterion=lander_stopping_criterion(num_timesteps),
         double_q=True,
+        rew_file=rew_file,
         **lander_kwargs()
     )
     env.close()
@@ -104,13 +106,20 @@ def get_env(seed):
     return env
 
 def main():
+    import time
+    # Get Atari games.
+    game_name = 'PongNoFrameskip-v4'
+    task = gym.make(game_name)
+    # time.strftime("%d-%m-%Y_%H-%M-%S")
+    rew_file_name = "{}_001_{}".format(game_name, time.strftime("%Y-%m-%d_%H-%M-%S"))
+
     # Run training
     seed = 4565 # you may want to randomize this
     print('random seed = %d' % seed)
     env = get_env(seed)
     session = get_session()
     set_global_seeds(seed)
-    lander_learn(env, session, num_timesteps=500000, seed=seed)
+    lander_learn(env, session, num_timesteps=500000, seed=seed, rew_file=rew_file_name)
 
 if __name__ == "__main__":
     main()

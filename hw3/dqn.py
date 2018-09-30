@@ -108,6 +108,19 @@ class QLearner(object):
     self.rew_file = str(uuid.uuid4()) + '.pkl' if rew_file is None else rew_file
 
     ###############
+    # RUN ENV     #
+    ###############
+    self.model_initialized = False
+    self.num_param_updates = 0
+    self.mean_episode_reward      = -float('nan')
+    self.best_mean_episode_reward = -float('inf')
+    self.last_obs = self.env.reset()
+    self.log_every_n_steps = 10000
+
+    self.start_time = None
+    self.t = 0
+
+    ###############
     # BUILD MODEL #
     ###############
 
@@ -150,14 +163,19 @@ class QLearner(object):
       obs_tp1_float = tf.cast(self.obs_tp1_ph, tf.float32) / 255.0
 
     '''
+    ##############################
+    # YOUR CODE HERE
     # Here, you should fill in your own code to compute the Bellman error. This requires
     # evaluating the current and next Q-values and constructing the corresponding error.
     # TensorFlow will differentiate this error for you, you just need to pass it to the
     # optimizer. See assignment text for details.
 
-    # Your code should produce one scalar-valued tensor: total_error
-    # This will be passed to the optimizer in the provided code below.
 
+
+    
+
+    
+    '''
     # Your code should also produce two collections of variables:
     # q_func_vars
     # target_q_func_vars
@@ -169,34 +187,39 @@ class QLearner(object):
     # And then you can obtain the variables like this:
     # q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='q_func')
     # Older versions of TensorFlow may require using "VARIABLES" instead of "GLOBAL_VARIABLES"
-
-    # Tip: use huber_loss (from dqn_utils) instead of squared error when defining self.total_error
-    '''
-    ##############################
-    # YOUR CODE HERE
     target_q_func_net = q_func(obs_tp1_float, self.num_actions, scope="target_q_func", reuse=False)
+    ## shape: [None, num_actions]
+    # target_q_func_net = tf.Print(target_q_func_net, [target_q_func_net], "target_q_func_net")  ## seems to decrease as time goes, werid
+    # target_q_func_net = tensor_check(target_q_func_net, msg="target_q_func_net")
     target_q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='target_q_func')
 
     self.q_func_net = q_func(obs_t_float, self.num_actions, scope="q_func", reuse=False)
-    self.q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='q_func')
+    q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='q_func')
 
     y_t_ph = self.rew_t_ph + (1-self.done_mask_ph) * gamma * tf.reduce_max(target_q_func_net, axis=1)
+    # y_t_ph = tf.Print(y_t_ph, [y_t_ph], "y_t_ph")
     ## shape: [None]
     act_onehot = tf.one_hot(self.act_t_ph, self.num_actions)
     q_values = tf.reduce_sum(self.q_func_net * act_onehot, axis=1) 
+    # q_values = tf.Print(q_values, [q_values], "q_values")
     ## shape: [None]
-    self.total_error = tf.reduce_mean(tf.losses.huber_loss(q_values, y_t_ph)) 
+
+    # Your code should produce one scalar-valued tensor: total_error
+    # This will be passed to the optimizer in the provided code below.
+    # Tip: use huber_loss (from dqn_utils) instead of squared error when defining self.total_error
+    #### self.total_error = tf.reduce_mean(tf.losses.huber_loss(q_values, y_t_ph)) 
+    self.total_error = tf.reduce_mean(huber_loss(q_values - y_t_ph)) 
     ##############################
 
     # construct optimization op (with gradient clipping)
     self.learning_rate = tf.placeholder(tf.float32, (), name="learning_rate")
     self.optimizer = self.optimizer_spec.constructor(learning_rate=self.learning_rate, **self.optimizer_spec.kwargs)
     self.train_fn = minimize_and_clip(self.optimizer, self.total_error,
-                 var_list=self.q_func_vars, clip_val=grad_norm_clipping)
+                 var_list=q_func_vars, clip_val=grad_norm_clipping)
 
     # update_target_fn will be called periodically to copy Q network to target Q network
     update_target_fn = []
-    for var, var_target in zip(sorted(self.q_func_vars,        key=lambda v: v.name),
+    for var, var_target in zip(sorted(q_func_vars,        key=lambda v: v.name),
                                sorted(target_q_func_vars, key=lambda v: v.name)):
         update_target_fn.append(var_target.assign(var))
     self.update_target_fn = tf.group(*update_target_fn)
@@ -205,18 +228,18 @@ class QLearner(object):
     self.replay_buffer = ReplayBuffer(replay_buffer_size, frame_history_len, lander=lander)
     self.replay_buffer_idx = None
 
-    ###############
-    # RUN ENV     #
-    ###############
-    self.model_initialized = False
-    self.num_param_updates = 0
-    self.mean_episode_reward      = -float('nan')
-    self.best_mean_episode_reward = -float('inf')
-    self.last_obs = self.env.reset()
-    self.log_every_n_steps = 10000
+    # ###############
+    # # RUN ENV     #
+    # ###############
+    # self.model_initialized = False
+    # self.num_param_updates = 0
+    # self.mean_episode_reward      = -float('nan')
+    # self.best_mean_episode_reward = -float('inf')
+    # self.last_obs = self.env.reset()
+    # self.log_every_n_steps = 10000
 
-    self.start_time = None
-    self.t = 0
+    # self.start_time = None
+    # self.t = 0
 
   def stopping_criterion_met(self):
     return self.stopping_criterion is not None and self.stopping_criterion(self.env, self.t)
@@ -239,7 +262,7 @@ class QLearner(object):
     # recorded from the simulator. Here, your code needs to store this
     # observation and its outcome (reward, next observation, etc.) into
     # the replay buffer while stepping the simulator forward one step.
-    idx = self.replay_buffer.store_frame(self.last_obs)
+    self.replay_buffer_idx = self.replay_buffer.store_frame(self.last_obs)
     ## return most recent frames
     latest_obs_frames = self.replay_buffer.encode_recent_observation()
 
@@ -256,11 +279,11 @@ class QLearner(object):
 
     # steps the environment forward one step
     obs, reward, done, info = self.env.step(action)
-    self.replay_buffer.store_effect(idx, action, reward, done)
+    self.replay_buffer.store_effect(self.replay_buffer_idx, action, reward, done)
 
     # resets the environment if you reached an episode boundary.
     if done:
-      self.obs = self.env.reset()
+      self.last_obs = self.env.reset()
     ##############################
 
 
@@ -273,16 +296,17 @@ class QLearner(object):
         self.t % self.learning_freq == 0 and \
         self.replay_buffer.can_sample(self.batch_size)):
 
-    ##############################
-    # YOUR CODE HERE
+      '''
+      ##############################
+      # YOUR CODE HERE
       # Here, you should perform training. Training consists of four steps:
-
+      '''
       # 3.a: use the replay buffer to sample a batch of transitions (see the
       # replay buffer code for function definition, each batch that you sample
       # should consist of current observations, current actions, rewards,
       # next observations, and done indicator).
 
-      obs_t_batch, act_t_batch, rew__t_batch, obs_tp1_batch, done_mask_batch = \
+      obs_t_batch, act_t_batch, rew_t_batch, obs_tp1_batch, done_mask_batch = \
           self.replay_buffer.sample(self.batch_size)
 
       # 3.b: initialize the model if it has not been initialized yet; to do
@@ -318,10 +342,13 @@ class QLearner(object):
       # (this is needed for computing self.total_error)
       # self.learning_rate -- you can get this from self.optimizer_spec.lr_schedule.value(t)
       # (this is needed by the optimizer to choose the learning rate)
+
+      # if (self.t % self.log_every_n_steps == 1) and self.model_initialized:
+      self.total_error = tf.Print(self.total_error, [self.total_error], "self.total_error: ")
       self.session.run(self.train_fn, \
                       feed_dict={self.obs_t_ph : obs_t_batch, 
                                   self.act_t_ph : act_t_batch, 
-                                  self.rew_t_ph : rew__t_batch, 
+                                  self.rew_t_ph : rew_t_batch, 
                                   self.obs_tp1_ph : obs_tp1_batch, 
                                   self.done_mask_ph : done_mask_batch,
                                   self.learning_rate : self.optimizer_spec.lr_schedule.value(self.t)})

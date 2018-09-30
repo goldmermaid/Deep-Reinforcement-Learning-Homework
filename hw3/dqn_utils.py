@@ -5,6 +5,9 @@ import tensorflow as tf
 import numpy as np
 import random
 
+def tensor_check(tensor,msg='||| '): 
+    return tf.Print(tensor, [str(tensor.shape), tensor.shape, tf.shape(tensor), tensor.get_shape()], message=msg)
+
 def huber_loss(x, delta=1.0):
     # https://en.wikipedia.org/wiki/Huber_loss
     return tf.where(
