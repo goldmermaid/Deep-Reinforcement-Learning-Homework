@@ -177,13 +177,13 @@ class QLearner(object):
     target_q_func_net = q_func(obs_tp1_float, self.num_actions, scope="target_q_func", reuse=False)
     target_q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='target_q_func')
 
-    q_func_net = q_func(obs_t_float, self.num_actions, scope="q_func", reuse=False)
-    q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='q_func')
+    self.q_func_net = q_func(obs_t_float, self.num_actions, scope="q_func", reuse=False)
+    self.q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='q_func')
 
     y_t_ph = self.rew_t_ph + (1-self.done_mask_ph) * gamma * tf.reduce_max(target_q_func_net, axis=1)
     ## shape: [None]
     act_onehot = tf.one_hot(self.act_t_ph, self.num_actions)
-    q_values = tf.reduce_sum(q_func_net * act_onehot, axis=1) 
+    q_values = tf.reduce_sum(self.q_func_net * act_onehot, axis=1) 
     ## shape: [None]
     self.total_error = tf.reduce_mean(tf.losses.huber_loss(q_values, y_t_ph)) 
     ##############################
@@ -192,11 +192,11 @@ class QLearner(object):
     self.learning_rate = tf.placeholder(tf.float32, (), name="learning_rate")
     self.optimizer = self.optimizer_spec.constructor(learning_rate=self.learning_rate, **self.optimizer_spec.kwargs)
     self.train_fn = minimize_and_clip(self.optimizer, self.total_error,
-                 var_list=q_func_vars, clip_val=grad_norm_clipping)
+                 var_list=self.q_func_vars, clip_val=grad_norm_clipping)
 
     # update_target_fn will be called periodically to copy Q network to target Q network
     update_target_fn = []
-    for var, var_target in zip(sorted(q_func_vars,        key=lambda v: v.name),
+    for var, var_target in zip(sorted(self.q_func_vars,        key=lambda v: v.name),
                                sorted(target_q_func_vars, key=lambda v: v.name)):
         update_target_fn.append(var_target.assign(var))
     self.update_target_fn = tf.group(*update_target_fn)
@@ -249,7 +249,7 @@ class QLearner(object):
     # may not yet have been initialized (but of course, the first step
     # might as well be random, since you haven't trained your net...)
     if self.model_initialized and not choose_random_action:
-        action_values = self.session.run(q_func_net, feed_dict={self.obs_t_ph: [latest_obs_frames]})
+        action_values = self.session.run(self.q_func_net, feed_dict={self.obs_t_ph: [latest_obs_frames]})
         action  = np.argmax(action_values)
     else:
         action = np.random.randint(self.num_actions)
