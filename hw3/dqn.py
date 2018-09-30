@@ -174,15 +174,15 @@ class QLearner(object):
     '''
     ##############################
     # YOUR CODE HERE
-    target_q_func_net = q_func(obs_th1_float, self.num_actions, scope="target_q_func", reuse=False)
+    target_q_func_net = q_func(obs_tp1_float, self.num_actions, scope="target_q_func", reuse=False)
     target_q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='target_q_func')
 
     q_func_net = q_func(obs_t_float, self.num_actions, scope="q_func", reuse=False)
     q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='q_func')
 
-    y_t_ph = self.rew_t_ph + (1-self.done_mask_ph) * self.gamma * tf.reduce_max(target_q_func_net, axis=1)
+    y_t_ph = self.rew_t_ph + (1-self.done_mask_ph) * gamma * tf.reduce_max(target_q_func_net, axis=1)
     ## shape: [None]
-    act_onehot = tf.one_hot(self.act_t_ph, num_actions)
+    act_onehot = tf.one_hot(self.act_t_ph, self.num_actions)
     q_values = tf.reduce_sum(q_func_net * act_onehot, axis=1) 
     ## shape: [None]
     self.total_error = tf.reduce_mean(tf.losses.huber_loss(q_values, y_t_ph)) 
@@ -252,15 +252,15 @@ class QLearner(object):
         action_values = self.session.run(q_func_net, feed_dict={self.obs_t_ph: [latest_obs_frames]})
         action  = np.argmax(action_values)
     else:
-        action = np.random.randint(num_actions)
+        action = np.random.randint(self.num_actions)
 
     # steps the environment forward one step
-    obs, reward, done, info = env.step(action)
-    self.store_effect(idx, action, reward, done)
+    obs, reward, done, info = self.env.step(action)
+    self.replay_buffer.store_effect(idx, action, reward, done)
 
     # resets the environment if you reached an episode boundary.
     if done:
-      self.obs = env.reset()
+      self.obs = self.env.reset()
     ##############################
 
 
@@ -282,7 +282,7 @@ class QLearner(object):
       # should consist of current observations, current actions, rewards,
       # next observations, and done indicator).
 
-      obs_t_batch, act_t_ph, rew__t_batch, obs_tp1_batch, done_mask_ph = \
+      obs_t_batch, act_t_batch, rew__t_batch, obs_tp1_batch, done_mask_batch = \
           self.replay_buffer.sample(self.batch_size)
 
       # 3.b: initialize the model if it has not been initialized yet; to do
@@ -297,7 +297,7 @@ class QLearner(object):
       # Remember that you have to update the target network too (see 3.d)!
 
       if not self.model_initialized:
-        self.exploration.initialize_interdependent_variables(self.session, tf.global_variables(), 
+        initialize_interdependent_variables(self.session, tf.global_variables(), 
           {
              self.obs_t_ph: obs_t_batch,
              self.obs_tp1_ph: obs_tp1_batch,
@@ -319,12 +319,12 @@ class QLearner(object):
       # self.learning_rate -- you can get this from self.optimizer_spec.lr_schedule.value(t)
       # (this is needed by the optimizer to choose the learning rate)
       self.session.run(self.train_fn, \
-                      feed_dict={{self.obs_t_batch : obs_t_ph, 
-                                  self.act_t_ph : act_t_ph, 
-                                  self.rew__t_batch : rew_t_ph, 
-                                  self.obs_tp1_batch : obs_tp1_ph, 
-                                  self.done_mask_ph : done_mask_ph,
-                                  self.learning_rate : self.optimizer_spec.lr_schedule.value(t)})
+                      feed_dict={self.obs_t_ph : obs_t_batch, 
+                                  self.act_t_ph : act_t_batch, 
+                                  self.rew_t_ph : rew__t_batch, 
+                                  self.obs_tp1_ph : obs_tp1_batch, 
+                                  self.done_mask_ph : done_mask_batch,
+                                  self.learning_rate : self.optimizer_spec.lr_schedule.value(self.t)})
 
       # 3.d: periodically update the target network by calling
       # self.session.run(self.update_target_fn)
@@ -333,7 +333,7 @@ class QLearner(object):
       if self.num_param_updates % self.target_update_freq == 0:
         self.session.run(self.update_target_fn)
       ##############################
-      
+
       self.num_param_updates += 1
 
     self.t += 1
