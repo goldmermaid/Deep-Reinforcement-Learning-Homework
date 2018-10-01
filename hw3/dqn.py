@@ -189,24 +189,27 @@ class QLearner(object):
     # Older versions of TensorFlow may require using "VARIABLES" instead of "GLOBAL_VARIABLES"
     self.q_func_net = q_func(obs_t_float, self.num_actions, scope="q_func", reuse=False)
     target_q_func_net = q_func(obs_tp1_float, self.num_actions, scope="target_q_func", reuse=False)
-    target_q_func_net = tf.stop_gradient(target_q_func_net). ## !!!!!!
+    target_q_func_net = tf.stop_gradient(target_q_func_net) ## !!!!!!
     ## shape: [None, num_actions]
-    # target_q_func_net = tf.Print(target_q_func_net, [target_q_func_net], "target_q_func_net")  ## seems to decrease as time goes, werid
-    # target_q_func_net = tensor_check(target_q_func_net, msg="target_q_func_net")
 
+    if double_q:
+      target_q_func_net_prime = q_func(obs_tp1_float, self.num_actions, scope="target_q_func", reuse=False)
+      y_t_ph = self.rew_t_ph + (1-self.done_mask_ph) * gamma * tf.reduce_max(target_q_func_net_prime, axis=1)
 
-    y_t_ph = self.rew_t_ph + (1-self.done_mask_ph) * gamma * tf.reduce_max(target_q_func_net, axis=1)
-    # y_t_ph = tf.Print(y_t_ph, [y_t_ph], "y_t_ph")
-    ## shape: [None]
+    else:
+      y_t_ph = self.rew_t_ph + (1-self.done_mask_ph) * gamma * tf.reduce_max(target_q_func_net, axis=1)
+      ## shape: [None]
+    
+
     act_onehot = tf.one_hot(self.act_t_ph, self.num_actions)
     q_values = tf.reduce_sum(self.q_func_net * act_onehot, axis=1) 
-    # q_values = tf.Print(q_values, [q_values], "q_values")
-    ## shape: [None]
+      ## shape: [None]
 
     # Your code should produce one scalar-valued tensor: total_error
     # This will be passed to the optimizer in the provided code below.
     # Tip: use huber_loss (from dqn_utils) instead of squared error when defining self.total_error
     #### self.total_error = tf.reduce_mean(tf.losses.huber_loss(q_values, y_t_ph)) 
+    
     self.total_error = tf.reduce_mean(huber_loss(q_values - y_t_ph)) 
 
     target_q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='target_q_func')
