@@ -140,6 +140,7 @@ def main():
     session = get_session()
 
     if args.explore:
+        print('starting local exploration_schedule')
         less_exploration_schedule = PiecewiseSchedule(
         [
             (0, 1.0),
@@ -148,7 +149,7 @@ def main():
             (5e6, 0.005),  ## 5m
             (10e6, 0.001),  ## 10m
         ], outside_value=0.001
-    )
+        )
         atari_learn(env, session, num_timesteps=2e8, rew_file=rew_file_name, exploration_schedule=less_exploration_schedule)
     else:
         atari_learn(env, session, num_timesteps=2e8, rew_file=rew_file_name)
