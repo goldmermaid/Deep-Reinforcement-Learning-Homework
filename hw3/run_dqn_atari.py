@@ -33,7 +33,7 @@ exploration_schedule = PiecewiseSchedule(
         [
             (0, 1.0),
             (1e6, 0.1),
-            (num_iterations / 2, 0.01),
+            (1e8 / 2, 0.01),
         ], outside_value=0.01
     )
 
