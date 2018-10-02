@@ -124,7 +124,7 @@ def get_env(task, seed):
 
 def main():
     parser = argparse.ArgumentParser()    
-    parser.add_argument('--explore', type=str, action='store_true')
+    parser.add_argument('--explore', action='store_true')
     args = parser.parse_args()
 
     import time
