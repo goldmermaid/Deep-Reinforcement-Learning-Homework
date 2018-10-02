@@ -28,10 +28,20 @@ def atari_model(img_in, num_actions, scope, reuse=False):
 
         return out
 
+
+exploration_schedule = PiecewiseSchedule(
+        [
+            (0, 1.0),
+            (1e6, 0.1),
+            (num_iterations / 2, 0.01),
+        ], outside_value=0.01
+    )
+
 def atari_learn(env,
                 session,
                 num_timesteps,
-                rew_file):
+                rew_file,
+                exploration_schedule=exploration_schedule):
     # This is just a rough estimate
     num_iterations = float(num_timesteps) / 4.0
 
@@ -53,13 +63,7 @@ def atari_learn(env,
         # which is different from the number of steps in the underlying env
         return get_wrapper_by_name(env, "Monitor").get_total_steps() >= num_timesteps
 
-    exploration_schedule = PiecewiseSchedule(
-        [
-            (0, 1.0),
-            (1e6, 0.1),
-            (num_iterations / 2, 0.01),
-        ], outside_value=0.01
-    )
+    
 
     dqn.learn(
         env=env,
@@ -119,6 +123,10 @@ def get_env(task, seed):
     return env
 
 def main():
+    parser = argparse.ArgumentParser()    
+    parser.add_argument('--explore', type=str, action='store_true')
+    args = parser.parse_args()
+
     import time
     # Get Atari games.
     game_name = 'PongNoFrameskip-v4'
@@ -130,7 +138,20 @@ def main():
     print('random seed = %d' % seed)
     env = get_env(task, seed)
     session = get_session()
-    atari_learn(env, session, num_timesteps=2e8, rew_file=rew_file_name)
+
+    if args.explore:
+        less_exploration_schedule = PiecewiseSchedule(
+        [
+            (0, 1.0),
+            (1e6, 0.1),
+            (2e6, 0.01),
+            (5e6, 0.005),  ## 5m
+            (10e6, 0.001),  ## 10m
+        ], outside_value=0.001
+    )
+        atari_learn(env, session, num_timesteps=2e8, rew_file=rew_file_name, exploration_schedule=less_exploration_schedule)
+    else:
+        atari_learn(env, session, num_timesteps=2e8, rew_file=rew_file_name)
 
 if __name__ == "__main__":
     main()

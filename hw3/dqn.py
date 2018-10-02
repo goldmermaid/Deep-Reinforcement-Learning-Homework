@@ -193,7 +193,7 @@ class QLearner(object):
     ## shape: [None, num_actions]
 
     if double_q:
-      target_q_func_net_prime = q_func(obs_tp1_float, self.num_actions, scope="target_q_func", reuse=False)
+      target_q_func_net_prime = q_func(obs_tp1_float, self.num_actions, scope="target_q_func", reuse=tf.AUTO_REUSE)
       y_t_ph = self.rew_t_ph + (1-self.done_mask_ph) * gamma * tf.reduce_max(target_q_func_net_prime, axis=1)
 
     else:
