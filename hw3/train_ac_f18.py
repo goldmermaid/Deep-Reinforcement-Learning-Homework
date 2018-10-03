@@ -301,6 +301,7 @@ class Agent(object):
             # otherwise, it is 0
             if done or steps > self.max_path_length:
                 terminals.append(1)
+                break
             else:
                 terminals.append(0)
             #####################################################
@@ -342,7 +343,7 @@ class Agent(object):
         # YOUR CODE HERE
         b_n = self.sess.run(self.critic_prediction, feed_dict={self.sy_ob_no : ob_no})
         q_n = self.sess.run(self.critic_prediction, feed_dict={self.sy_ob_no : next_ob_no})
-        adv_n = re_n + gamma*(1-terminal_n)*q_n - b_n
+        adv_n = re_n + self.gamma*(1-terminal_n)*q_n - b_n
         
         if self.normalize_advantages:
             # YOUR_HW2 CODE_HERE
@@ -387,6 +388,7 @@ class Agent(object):
             # by evaluating V(s') on the updated critic
             v_s_prime = self.sess.run(self.critic_prediction, feed_dict={self.sy_ob_no : next_ob_no})
             target_value_y = re_n + self.gamma*(1-terminal_n)*v_s_prime
+            print("##################### timestep {} #####################".format(timestep))
         #####################################################
 
     def update_actor(self, ob_no, ac_na, adv_n):
@@ -448,6 +450,7 @@ def train_AC(
 
     # Is this env continuous, or self.discrete?
     discrete = isinstance(env.action_space, gym.spaces.Discrete)
+    print("&&&&&&&&&&&&&&&&&&& DISCRETE : {} $$$$$$$$$$$$$$$$$$$$$$$".format(discrete))
 
     # Observation and action sizes
     ob_dim = env.observation_space.shape[0]
@@ -512,8 +515,11 @@ def train_AC(
         #####################################################
         # YOUR CODE HERE
         agent.update_critic(ob_no, next_ob_no, re_n, terminal_n)
+        print("********** DONE  update_critic ************")
         adv_n = agent.estimate_advantage(ob_no, next_ob_no, re_n, terminal_n)
+        print("********** DONE  estimate_advantage ************")
         agent.update_actor(ob_no, ac_na, adv_n)
+        print("********** DONE  update_actor ************")
         #####################################################
 
         # Log diagnostics
