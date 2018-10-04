@@ -123,15 +123,57 @@ def get_env(task, seed):
     return env
 
 def main():
+    ###########################################################
+    ## different exploration_schedule
+
+    default_exploration_schedule = PiecewiseSchedule(
+    [
+        (0, 1.0),
+        (1e6, 0.1),
+        (1e8 / 2, 0.01),
+    ], outside_value=0.01
+    )
+
+    random_exploration_schedule = PiecewiseSchedule(
+    [
+        (0, 1.0),
+        (4e6, 0.1),
+    ], outside_value=0.01
+    )
+
+    tight_exploration_schedule = PiecewiseSchedule(
+    [
+        (0, 1.0),
+        (1e6, 0.1),
+        (2e6, 0.01),
+        (5e6, 0.005),  ## 5m
+        (10e6, 0.001),  ## 10m
+    ], outside_value=0.001
+    )
+
+    super_tight_exploration_schedule = PiecewiseSchedule(
+    [
+        (0, 1.0),
+        (1e5, 0.1),
+        (1e6, 0.01),
+        (2e6, 0.005),  ## 5m
+    ], outside_value=0.001
+    )
+    ###########################################################
+
     parser = argparse.ArgumentParser()    
-    parser.add_argument('--explore', action='store_true')
+    parser_algorithm = parser.add_mutually_exclusive_group()
+    parser_algorithm.add_argument('--random_exploration_schedule', action='store_true')
+    # parser_algorithm.add_argument('--default_exploration_schedule', action='store_true')
+    parser_algorithm.add_argument('--tight_exploration_schedule', action='store_true')
+    parser_algorithm.add_argument('--super_tight_exploration_schedule', action='store_true')
     args = parser.parse_args()
 
     import time
     # Get Atari games.
     game_name = 'PongNoFrameskip-v4'
     task = gym.make(game_name)
-    rew_file_name = "{}_001_{}".format(game_name, time.strftime("%d-%m-%Y_%H-%M-%S"))
+    
 
     # Run training
     seed = random.randint(0, 9999)
@@ -139,20 +181,23 @@ def main():
     env = get_env(task, seed)
     session = get_session()
 
-    if args.explore:
-        print('starting local exploration_schedule')
-        less_exploration_schedule = PiecewiseSchedule(
-        [
-            (0, 1.0),
-            (1e6, 0.1),
-            (2e6, 0.01),
-            (5e6, 0.005),  ## 5m
-            (10e6, 0.001),  ## 10m
-        ], outside_value=0.001
-        )
-        atari_learn(env, session, num_timesteps=2e8, rew_file=rew_file_name, exploration_schedule=less_exploration_schedule)
+    if args.random_exploration_schedule:
+        print('starting random_exploration_schedule')
+        rew_file_name = "{}_random_{}".format(game_name, time.strftime("%d-%m-%Y_%H-%M-%S"))
+        atari_learn(env, session, num_timesteps=2e8, rew_file=rew_file_name, exploration_schedule=random_exploration_schedule)
+    elif args.random_exploration_schedule:
+        print('starting tight_exploration_schedule')
+        rew_file_name = "{}_tight_{}".format(game_name, time.strftime("%d-%m-%Y_%H-%M-%S"))
+        atari_learn(env, session, num_timesteps=2e8, rew_file=rew_file_name, exploration_schedule=tight_exploration_schedule)
+    elif args.random_exploration_schedule:
+        print('starting super_tight_exploration_schedule')
+        rew_file_name = "{}_super_tight_{}".format(game_name, time.strftime("%d-%m-%Y_%H-%M-%S"))
+        atari_learn(env, session, num_timesteps=2e8, rew_file=rew_file_name, exploration_schedule=super_tight_exploration_schedule)
     else:
-        atari_learn(env, session, num_timesteps=2e8, rew_file=rew_file_name)
+        print('starting default_exploration_schedule')
+        rew_file_name = "{}_default_{}".format(game_name, time.strftime("%d-%m-%Y_%H-%M-%S"))
+        atari_learn(env, session, num_timesteps=2e8, rew_file=rew_file_name, exploration_schedule=default_exploration_schedule)
+
 
 if __name__ == "__main__":
     main()

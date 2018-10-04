@@ -347,9 +347,7 @@ class Agent(object):
         
         if self.normalize_advantages:
             # YOUR_HW2 CODE_HERE
-            b_n -= (np.mean(b_n, axis=0) - np.mean(q_n, axis=0))
-            b_n /= (np.std(b_n, axis=0) / (np.std(q_n, axis=0) + 1e-4) + 1e-4)
-            adv_n = q_n - b_n
+            adv_n = (adv_n - np.mean(adv_n)) / (np.std(adv_n) + 1e-4)
         #####################################################
         return adv_n
 
