@@ -1,6 +1,6 @@
 import tensorflow as tf
 import numpy as np
-
+import operator
 import utils
 
 
@@ -12,6 +12,8 @@ class ModelBasedPolicy(object):
                  horizon=15,
                  num_random_action_selection=4096,
                  nn_layers=1):
+        ## self._init_dataset: see utils.Dataset
+        self._env = env
         self._cost_fn = env.cost_fn
         self._state_dim = env.observation_space.shape[0]
         self._action_dim = env.action_space.shape[0]
@@ -41,7 +43,9 @@ class ModelBasedPolicy(object):
         """
         ### PROBLEM 1
         ### YOUR CODE HERE
-        raise NotImplementedError
+        state_ph = tf.placeholder(dtype=tf.float32, shape=[None, self._state_dim], name='state_ph')
+        action_ph = tf.placeholder(dtype=tf.float32, shape=[None, self._action_dim], name='action_ph')
+        next_state_ph = tf.placeholder(dtype=tf.float32, shape=[None, self._state_dim], name='next_state_ph')
 
         return state_ph, action_ph, next_state_ph
 
@@ -50,23 +54,39 @@ class ModelBasedPolicy(object):
             Takes as input a state and action, and predicts the next state
 
             returns:
-                next_state_pred: predicted next state
-
-            implementation details (in order):
-                (a) Normalize both the state and action by using the statistics of self._init_dataset and
-                    the utils.normalize function
-                (b) Concatenate the normalized state and action
-                (c) Pass the concatenated, normalized state-action tensor through a neural network with
-                    self._nn_layers number of layers using the function utils.build_mlp. The resulting output
-                    is the normalized predicted difference between the next state and the current state
-                (d) Unnormalize the delta state prediction, and add it to the current state in order to produce
-                    the predicted next state
-
+                next_state_pred: predicted next state                
         """
         ### PROBLEM 1
         ### YOUR CODE HERE
-        raise NotImplementedError
+        ## (a) Normalize both the state and action by using the statistics of self._init_dataset and
+        ##             the utils.normalize function
+        state_mean = self._init_dataset.state_mean
+        state_std = self._init_dataset.state_std
+        state_normalize = utils.normalize(state, state_mean, state_std, eps=1e-8)
 
+        # # @@@@@@ 
+        # print("state", tf.convert_to_tensor(state).get_shape())
+        # print("action", tf.convert_to_tensor(action).get_shape())
+        # state (?, 20)
+        # action (?, 6)
+        action_mean = self._init_dataset.action_mean
+        action_std = self._init_dataset.action_std
+        action_normalize = utils.normalize(action, action_mean, action_std, eps=1e-8)
+
+        ## (b) Concatenate the normalized state and action
+        concatenated = tf.concat([state_normalize,action_normalize],axis=1,name='concatenated')
+
+        # (c) Pass the concatenated, normalized state-action tensor through a neural network with
+        #     self._nn_layers number of layers using the function utils.build_mlp. The resulting output
+        #     is the normalized predicted difference between the next state and the current state
+        next_state = utils.build_mlp(input_layer=concatenated, output_dim=self._state_dim, scope='dynamics_func', 
+                                n_layers=self._nn_layers, reuse=reuse)
+
+        # (d) Unnormalize the delta state prediction, and add it to the current state in order to produce
+        #     the predicted next state
+        delta_state_mean = self._init_dataset.delta_state_mean
+        delta_state_std = self._init_dataset.delta_state_std
+        next_state_pred = state+utils.unnormalize(next_state, delta_state_mean, delta_state_std)
         return next_state_pred
 
     def _setup_training(self, state_ph, next_state_ph, next_state_pred):
@@ -76,21 +96,27 @@ class ModelBasedPolicy(object):
 
             returns:
                 loss: Scalar loss tensor
-                optimizer: Operation used to perform gradient descent
-
-            implementation details (in order):
-                (a) Compute both the actual state difference and the predicted state difference
-                (b) Normalize both of these state differences by using the statistics of self._init_dataset and
-                    the utils.normalize function
-                (c) The loss function is the mean-squared-error between the normalized state difference and
-                    normalized predicted state difference
-                (d) Create the optimizer by minimizing the loss using the Adam optimizer with self._learning_rate
+                optimizer: Operation used to perform gradient descent                
 
         """
         ### PROBLEM 1
         ### YOUR CODE HERE
-        raise NotImplementedError
+        # (a) Compute both the actual state difference and the predicted state difference
+        actual_state_diff = next_state_ph - state_ph
+        pred_state_diff = next_state_pred - state_ph
 
+        # (b) Normalize both of these state differences by using the statistics of self._init_dataset and
+        #     the utils.normalize function
+        state_mean = self._init_dataset.state_mean
+        state_std = self._init_dataset.state_std
+        actual_state_normalize = utils.normalize(actual_state_diff, state_mean, state_std, eps=1e-8)
+        pred_state_normalize = utils.normalize(pred_state_diff, state_mean, state_std, eps=1e-8)
+
+        # (c) The loss function is the mean-squared-error between the normalized state difference and
+        #     normalized predicted state difference
+        loss = tf.losses.mean_squared_error(labels=actual_state_normalize,predictions=pred_state_normalize)
+        # (d) Create the optimizer by minimizing the loss using the Adam optimizer with self._learning_rate
+        optimizer = tf.train.AdamOptimizer(self._learning_rate).minimize(loss)
         return loss, optimizer
 
     def _setup_action_selection(self, state_ph):
@@ -101,28 +127,46 @@ class ModelBasedPolicy(object):
 
             returns:
                 best_action: the action that minimizes the cost function (tensor with shape [self._action_dim])
-
-            implementation details (in order):
-                (a) We will assume state_ph has a batch size of 1 whenever action selection is performed
-                (b) Randomly sample uniformly self._num_random_action_selection number of action sequences,
-                    each of length self._horizon
-                (c) Starting from the input state, unroll each action sequence using your neural network
-                    dynamics model
-                (d) While unrolling the action sequences, keep track of the cost of each action sequence
-                    using self._cost_fn
-                (e) Find the action sequence with the lowest cost, and return the first action in that sequence
-
-            Hints:
-                (i) self._cost_fn takes three arguments: states, actions, and next states. These arguments are
-                    2-dimensional tensors, where the 1st dimension is the batch size and the 2nd dimension is the
-                    state or action size
-                (ii) You should call self._dynamics_func and self._cost_fn a total of self._horizon times
-                (iii) Use tf.random_uniform(...) to generate the random action sequences
-
+        
+        # Hints:
+        # (i) self._cost_fn takes three arguments: states, actions, and next states. These arguments are
+        #     2-dimensional tensors, where the 1st dimension is the batch size and the 2nd dimension is the
+        #     state or action size
+        # (ii) You should call self._dynamics_func and self._cost_fn a total of self._horizon times
+        # (iii) Use tf.random_uniform(...) to generate the random action sequences
         """
+
         ### PROBLEM 2
         ### YOUR CODE HERE
-        raise NotImplementedError
+        # (a) We will assume state_ph has a batch size of 1 whenever action selection is performed
+        # (b) Randomly sample uniformly self._num_random_action_selection number of action sequences,
+        #     each of length self._horizon
+
+        # @@@@@@  print("self._init_dataset._actions[0]", tf.convert_to_tensor(self._init_dataset._actions[0]).get_shape())
+        sampled_actions = tf.random_uniform(shape=[self._num_random_action_selection, self._horizon, self._action_dim],
+                                            minval=self._action_space_low, maxval=self._action_space_high, dtype=tf.float32)        
+
+        # (c) Starting from the input state, unroll each action sequence using your neural network
+        #     dynamics model
+        # (d) While unrolling the action sequences, keep track of the cost of each action sequence
+        #     using self._cost_fn
+        
+        cost = 0  
+        ## NOTE: the cost is a number rather than a list with len self._num_random_action_selection,
+        ## since the env._cost_fn return a number, see details in half_cheetah_env.py
+        for ac in range(self._horizon):
+            action_ph = sampled_actions[:,ac,:]
+            next_state_pred = self._dynamics_func(state_ph, action_ph, reuse=tf.AUTO_REUSE)   
+            # !!!!!! reuse=False in utils.build_mlp
+            cost += self._cost_fn(states=state_ph, actions=action_ph, next_states=next_state_pred)
+            ## see details in half_cheetah_env.py : def cost_fn(states, actions, next_states):
+            state_ph = next_state_pred
+
+        # (e) Find the action sequence with the lowest cost, and return the first action in that sequence
+        # min_index, min_value = min(enumerate(cost), key=operator.itemgetter(1))
+        min_index = tf.argmin(cost)
+        best_action = sampled_actions[min_index][0]
+        # print("best_action", best_action.get_shape())
 
         return best_action
 
@@ -134,17 +178,23 @@ class ModelBasedPolicy(object):
         """
         sess = tf.Session()
 
-        ### PROBLEM 1
+        ### PROBLEM 1 : The neural network dynamics model and train it using a fixed dataset 
+        ###             consisting of rollouts collected by a random policy.
         ### YOUR CODE HERE
-        raise NotImplementedError
-        ### PROBLEM 2
+        state_ph, action_ph, next_state_ph = self._setup_placeholders()
+        next_state_pred = self._dynamics_func(state_ph, action_ph, reuse= False) 
+        ## !!!!!! reuse should be false here since each time setup_graph, we want a new network
+        loss, optimizer = self._setup_training(state_ph, next_state_ph, next_state_pred)
+               
+
+        ### PROBLEM 2 : Action selection using your learned dynamics model and a given cost function.
         ### YOUR CODE HERE
-        best_action = None
+        best_action = self._setup_action_selection(state_ph)
 
         sess.run(tf.global_variables_initializer())
 
-        return sess, state_ph, action_ph, next_state_ph, \
-                next_state_pred, loss, optimizer, best_action
+        return sess, state_ph, action_ph, next_state_ph, next_state_pred, loss, optimizer, best_action
+
 
     def train_step(self, states, actions, next_states):
         """
@@ -155,7 +205,10 @@ class ModelBasedPolicy(object):
         """
         ### PROBLEM 1
         ### YOUR CODE HERE
-        raise NotImplementedError
+
+        _,loss =self._sess.run([self._optimizer, self._loss],feed_dict={self._state_ph: states,
+                                                                        self._action_ph: actions,
+                                                                        self._next_state_ph: next_states})
 
         return loss
 
@@ -170,11 +223,15 @@ class ModelBasedPolicy(object):
             (i) The state and action arguments are 1-dimensional vectors (NO batch dimension)
         """
         assert np.shape(state) == (self._state_dim,)
+        # print("self._state_dim ", tf.convert_to_tensor(self._state_dim).get_shape())
         assert np.shape(action) == (self._action_dim,)
 
         ### PROBLEM 1
         ### YOUR CODE HERE
-        raise NotImplementedError
+        # sess, state_ph, action_ph, next_state_ph, next_state_pred, loss, optimizer, best_action = self._setup_graph()
+        next_state_pred = self._sess.run([self._next_state_pred],feed_dict={self._state_ph: np.expand_dims(state,0),
+                                                                        self._action_ph: np.expand_dims(action,0)})
+        next_state_pred = np.squeeze(next_state_pred,axis=0)
 
         assert np.shape(next_state_pred) == (self._state_dim,)
         return next_state_pred
@@ -190,7 +247,10 @@ class ModelBasedPolicy(object):
 
         ### PROBLEM 2
         ### YOUR CODE HERE
-        raise NotImplementedError
+        ## convert the shape of state to [state, state, ...] with length self._num_random_action_selection
+        current_state = np.asarray([state] * self._num_random_action_selection)
+        best_action = self._sess.run([self._best_action],feed_dict={self._state_ph: current_state})
+        best_action = np.squeeze(best_action,axis=0)
 
         assert np.shape(best_action) == (self._action_dim,)
         return best_action
