@@ -53,12 +53,15 @@ def plot_data(data, value="AverageReturn"):
         data = pd.concat(data, ignore_index=True)
 
     sns.set(style="darkgrid", font_scale=1.5)
-    sns.tsplot(data=data, time="Iteration", value=value, unit="Unit", condition="Condition")
+    sns.tsplot(data=data, time="Iteration", value=value, unit="Unit", condition="Condition", color='green')
+    sns.tsplot(data=data, time="Iteration", value="ValAverageReturn", unit="Unit", condition="Condition")
     plt.legend(loc='best').draggable()
     plt.show()
 
 
+
 def get_datasets(fpath, condition=None):
+    print(fpath)
     unit = 0
     datasets = []
     for root, dir, files in os.walk(fpath):
@@ -92,7 +95,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('logdir', nargs='*')
     parser.add_argument('--legend', nargs='*')
-    parser.add_argument('--value', default='AverageReturn', nargs='*')
+    parser.add_argument('--value', default=['AverageReturn'], nargs='*')
     args = parser.parse_args()
 
     use_legend = False
